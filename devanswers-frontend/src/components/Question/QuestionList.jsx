@@ -6,6 +6,8 @@ import './QuestionList.css';
 
 const QUESTIONS_PER_PAGE = 5;
 
+// Reused on Home, tag pages and Profile. emptyTitle / emptyMessage let a screen show its
+// own empty state (Profile uses "No saved questions yet").
 const QuestionList = ({
     questions = [],
     emptyTitle = 'No questions found',
@@ -36,6 +38,8 @@ const QuestionList = ({
 
     const totalPages = Math.ceil(sorted.length / QUESTIONS_PER_PAGE);
     // Clamp when the list shrinks (e.g. the last item on the last page is unsaved)
+    // If the list shrinks (e.g. the last item on the last page is unsaved), fall back to the
+    // last page that still exists instead of showing an empty page.
     const safePage = Math.min(currentPage, Math.max(totalPages, 1));
     const start = (safePage - 1) * QUESTIONS_PER_PAGE;
     const currentQuestions = sorted.slice(start, start + QUESTIONS_PER_PAGE);

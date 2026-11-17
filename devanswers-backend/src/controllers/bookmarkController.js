@@ -5,6 +5,8 @@ import {
   getBookmarkedQuestionsService,
 } from '../services/bookmarkService.js';
 
+// Thin handlers: read the logged-in user (req.user.id, set by the authenticate
+// middleware), call the service, and reply with the { success, message, data } envelope.
 export const addBookmark = async (req, res) => {
   const { questionId } = req.params;
 

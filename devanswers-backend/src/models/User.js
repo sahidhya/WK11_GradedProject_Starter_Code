@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    // Ids of the questions this user has saved (see services/bookmarkService.js)
     bookmarks: {
         type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }],
         default: [],

@@ -33,6 +33,8 @@ export const createAnswerService = async ({ questionId, answerText, author }) =>
   return populatedAnswer;
 };
 
+// Edit an answer. Same rules as editing a question: valid text (400), exists (404),
+// author only (403), then save and mark it edited.
 export const updateAnswerService = async (answerId, answerText, loggedInUser) => {
   if (!mongoose.isValidObjectId(answerId)) {
     throw createAppError('Invalid answer id', 400);
@@ -53,6 +55,7 @@ export const updateAnswerService = async (answerId, answerText, loggedInUser) =>
   }
 
   answer.answerText = answerText.trim();
+  // The "edited" marker (set only when the answer is edited)
   answer.editedAt = new Date();
   await answer.save();
 

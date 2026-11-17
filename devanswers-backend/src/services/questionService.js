@@ -122,6 +122,8 @@ const resolveTagIds = (tagNames) =>
     }),
   );
 
+// Edit a question. Author only (admins cannot edit other people's posts). Order of checks:
+// valid input (400) -> question exists (404) -> is the author (403) -> save + mark edited.
 export const updateQuestionService = async (
   id,
   title,
@@ -129,6 +131,7 @@ export const updateQuestionService = async (
   tags,
   loggedInUser,
 ) => {
+  // Validate first: bad input is a 400, never a 500 or a blank post saved to the database.
   if (!mongoose.isValidObjectId(id)) {
     throw createAppError("Invalid question id", 400);
   }
@@ -154,6 +157,7 @@ export const updateQuestionService = async (
     throw createAppError("Not authorized to update this question", 403);
   }
 
+  // Turn tag names into Tag ids (existing tags are reused, new ones are created).
   const tagIds = await resolveTagIds(tagNames);
 
   const updatedQuestion = await Question.findByIdAndUpdate(
@@ -162,6 +166,7 @@ export const updateQuestionService = async (
       title: title.trim(),
       description: description.trim(),
       tags: tagIds,
+      // The "edited" marker. Set only here, so views and votes never make a post look edited.
       editedAt: new Date(),
     },
     { new: true },

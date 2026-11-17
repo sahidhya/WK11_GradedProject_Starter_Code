@@ -66,6 +66,7 @@ const Profile = () => {
 
   useEffect(() => {
     if (userInfo?.token) {
+      // Reload the saved list every time Profile opens so it is always current
       dispatch(fetchBookmarkedQuestions());
     }
   }, [userInfo?.token, dispatch]);

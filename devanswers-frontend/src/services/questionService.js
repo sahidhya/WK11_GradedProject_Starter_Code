@@ -43,6 +43,7 @@ export const createQuestion = async (questionData, token) => {
   return res.data.data;
 };
 
+// Edit a question (author only; the server answers 403 for anyone else).
 export const updateQuestion = async (id, { title, description, tags }, token) => {
   const res = await axiosInstance.put(
     QUESTION_API.UPDATE(id),

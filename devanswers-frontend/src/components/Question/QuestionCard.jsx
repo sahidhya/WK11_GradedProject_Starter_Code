@@ -47,6 +47,7 @@ const QuestionCard = ({ question }) => {
               <FaComments className="qcard-icon-comments" />
               <span className="qcard-answer-count">{answerCount}</span>
             </div>
+            {/* Save / unsave this question (outline = not saved, filled = saved) */}
             <BookmarkButton questionId={question._id} />
           </div>
 

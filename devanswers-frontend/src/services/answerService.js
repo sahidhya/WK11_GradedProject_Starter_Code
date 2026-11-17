@@ -19,6 +19,7 @@ export const downvoteAnswer = async (answerId, token) => {
   return res.data.data;
 };
 
+// Edit an answer (author only; the server answers 403 for anyone else).
 export const updateAnswer = async (answerId, answerText, token) => {
   const res = await axiosInstance.put(
     ANSWER_API.UPDATE(answerId),

@@ -22,6 +22,7 @@ const initialState = {
 // must not write the previous user's saves into the store.
 const STALE_SESSION = "stale-session";
 
+// Loads just the saved ids (on app start / login). They drive every icon's filled state.
 export const fetchBookmarkIds = createAsyncThunk(
   "bookmark/fetchBookmarkIds",
   async (_, { getState, rejectWithValue }) => {
@@ -42,6 +43,7 @@ export const fetchBookmarkIds = createAsyncThunk(
   },
 );
 
+// Loads the full saved questions for the Profile page (each time it opens).
 export const fetchBookmarkedQuestions = createAsyncThunk(
   "bookmark/fetchBookmarkedQuestions",
   async (_, { getState, rejectWithValue }) => {
@@ -62,6 +64,8 @@ export const fetchBookmarkedQuestions = createAsyncThunk(
   },
 );
 
+// Saves or unsaves one question. The reducers below update the UI immediately
+// (optimistic) and undo the change if the request fails.
 export const toggleBookmark = createAsyncThunk(
   "bookmark/toggleBookmark",
   async ({ questionId, currentlySaved }, { getState, rejectWithValue }) => {

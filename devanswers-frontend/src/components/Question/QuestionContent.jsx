@@ -12,19 +12,24 @@ const QuestionContent = ({ question }) => {
 
   const dispatch = useDispatch();
   const userInfo = useSelector((state) => state.user?.userInfo);
+  // The pencil is shown only to the person who wrote this question (the server enforces it too).
   const isAuthor =
     !!userInfo && !!question.author?._id &&
     String(question.author._id) === String(userInfo.userId);
 
+  // Edit-form state lives in this component: is the form open, is a save running,
+  // the server error to show, and the draft text.
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState({ title: '', description: '', tags: '' });
 
+  // Save is allowed only when the title, the description and at least one tag are not blank.
   const hasTag = form.tags.split(',').some((tag) => tag.trim());
   const canSave =
     !isSaving && form.title.trim() && form.description.trim() && hasTag;
 
+  // Open the form pre-filled with the saved values (tags shown as "a, b, c").
   const startEditing = () => {
     setForm({
       title: question.title || '',
@@ -44,6 +49,8 @@ const QuestionContent = ({ question }) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // Send the edit. On success the Redux store merges it, so the page updates instantly.
+  // On failure the form stays open with the typed text and shows the server's message.
   const handleSave = async () => {
     setIsSaving(true);
     setSaveError('');
@@ -77,6 +84,7 @@ const QuestionContent = ({ question }) => {
               </Card.Title>
             )}
             <div className="d-flex align-items-center">
+              {/* Pencil: visible to the author only */}
               {isAuthor && !isEditing && (
                 <Button
                   variant="link"
@@ -89,6 +97,7 @@ const QuestionContent = ({ question }) => {
                   <FaPencilAlt />
                 </Button>
               )}
+              {/* Save / unsave this question (outline = not saved, filled = saved) */}
               <BookmarkButton questionId={question._id} />
             </div>
           </div>
@@ -96,6 +105,7 @@ const QuestionContent = ({ question }) => {
             <span className="d-flex align-items-center gap-2">
               <FaClock />
               Asked {formatDate(question.createdAt)}
+              {/* "edited" label: only when the question has actually been edited */}
               {question.editedAt && (
                 <em className="ms-1" title={`Edited ${formatDate(question.editedAt)}`}>
                   edited

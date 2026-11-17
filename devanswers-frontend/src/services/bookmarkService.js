@@ -1,6 +1,7 @@
 import axiosInstance from "../api/axiosInstance.js";
 import { BOOKMARK_API } from "../config/config.js";
 
+// API calls for bookmarks. All of them need the logged-in user's token (Bearer header).
 const authHeader = (token) => ({
   headers: { Authorization: `Bearer ${token}` },
 });

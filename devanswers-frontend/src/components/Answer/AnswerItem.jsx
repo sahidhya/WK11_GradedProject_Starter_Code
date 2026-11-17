@@ -12,6 +12,7 @@ import './AnswerList.css';
 const AnswerItem = ({ answer }) => {
   const dispatch = useDispatch();
   const userInfo = useSelector((state) => state.user?.userInfo);
+  // The pencil is shown only to the author of this answer (the server enforces it too).
   const isAuthor =
     !!userInfo && !!answer.author?._id &&
     String(answer.author._id) === String(userInfo.userId);
@@ -32,6 +33,7 @@ const AnswerItem = ({ answer }) => {
     setSaveError('');
   };
 
+  // Save the edited text. On failure the form stays open with the draft and an error message.
   const handleSave = async () => {
     setIsSaving(true);
     setSaveError('');
@@ -112,6 +114,7 @@ const AnswerItem = ({ answer }) => {
                   <span>{formatDate(answer.createdAt)}</span>
                 </>
               )}
+              {/* "edited" label: only when this answer has been edited */}
               {answer.editedAt && (
                 <em title={`Edited ${formatDate(answer.editedAt)}`}>edited</em>
               )}
