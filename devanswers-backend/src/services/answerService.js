@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { createAppError } from '../utils/createAppError.js';
 import Answer from '../models/Answer.js';
 import { handleVote } from './voteService.js';
-import { getAI } from '../utils/geminiClient.js';
+import { generateText } from '../utils/geminiClient.js';
 
 export const getAnswersByQuestionIdService = async (questionId) => {
   const answers = await Answer.find({ questionId }).populate('author', 'name');
@@ -116,10 +116,7 @@ ${questionDescription}
 Answers:
 ${answersText}`;
 
-  const response = await getAI().models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-  });
+  const text = await generateText(prompt);
 
-  return { summary: response.text.trim() };
+  return { summary: text.trim() };
 };

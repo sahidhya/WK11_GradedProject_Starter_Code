@@ -4,7 +4,7 @@ import { createAppError } from "../utils/createAppError.js";
 import Answer from "../models/Answer.js";
 import Tag from "../models/Tag.js";
 import { handleVote } from "./voteService.js";
-import { getAI, extractJSON } from "../utils/geminiClient.js";
+import { generateText, extractJSON } from "../utils/geminiClient.js";
 
 export const getAllQuestionsService = async () => {
   const questions = await Question.find({})
@@ -232,10 +232,7 @@ Title: ${title}
 Description: ${description}
 Tags: ${tags || ''}`;
 
-  const response = await getAI().models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-  });
+  const text = await generateText(prompt);
 
-  return extractJSON(response.text);
+  return extractJSON(text);
 };
