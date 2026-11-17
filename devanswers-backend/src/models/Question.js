@@ -33,6 +33,12 @@ const questionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true,
+    },
+    // Set only by the update service. updatedAt cannot be used for the
+    // "edited" indicator because views and votes also bump it.
+    editedAt: {
+        type: Date,
+        default: null,
     }
 }, {
     timestamps: true,

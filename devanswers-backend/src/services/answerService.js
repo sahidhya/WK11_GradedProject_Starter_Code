@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { createAppError } from '../utils/createAppError.js';
 import Answer from '../models/Answer.js';
 import { handleVote } from './voteService.js';
@@ -33,20 +34,26 @@ export const createAnswerService = async ({ questionId, answerText, author }) =>
 };
 
 export const updateAnswerService = async (answerId, answerText, loggedInUser) => {
+  if (!mongoose.isValidObjectId(answerId)) {
+    throw createAppError('Invalid answer id', 400);
+  }
+  if (typeof answerText !== 'string' || answerText.trim().length === 0) {
+    throw createAppError('Answer text is required', 400);
+  }
+
   const answer = await Answer.findById(answerId);
 
   if (!answer) {
     throw createAppError('Answer not found', 404);
   }
 
-  if (
-    answer.author.toString() !== loggedInUser.id.toString() &&
-    !loggedInUser.isAdmin
-  ) {
+  // Author only: admins may delete, but not edit, other users' answers
+  if (answer.author.toString() !== loggedInUser.id.toString()) {
     throw createAppError('Not authorized to update this answer', 403);
   }
 
-  answer.answerText = answerText;
+  answer.answerText = answerText.trim();
+  answer.editedAt = new Date();
   await answer.save();
 
   return Answer.findById(answerId).populate('author', 'name');

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Question from "../models/Question.js";
 import { createAppError } from "../utils/createAppError.js";
 import Answer from "../models/Answer.js";
@@ -86,6 +87,41 @@ export const createQuestionService = async ({
   return newQuestion;
 };
 
+const isNonBlankString = (value) =>
+  typeof value === "string" && value.trim().length > 0;
+
+// Parses "a, b, a" into unique, trimmed, non-empty tag names
+const parseTagNames = (tags) => {
+  if (typeof tags !== "string") return [];
+  const names = tags
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  return [...new Set(names)];
+};
+
+// Finds or creates each tag. If a concurrent request creates the same tag
+// first (duplicate key), reuse the one that now exists instead of failing.
+const resolveTagIds = (tagNames) =>
+  Promise.all(
+    tagNames.map(async (name) => {
+      const existingTag = await Tag.findOne({ name });
+      if (existingTag) return existingTag._id;
+
+      try {
+        const newTag = new Tag({ name });
+        await newTag.save();
+        return newTag._id;
+      } catch (error) {
+        if (error?.code === 11000) {
+          const createdMeanwhile = await Tag.findOne({ name });
+          if (createdMeanwhile) return createdMeanwhile._id;
+        }
+        throw error;
+      }
+    }),
+  );
+
 export const updateQuestionService = async (
   id,
   title,
@@ -93,41 +129,45 @@ export const updateQuestionService = async (
   tags,
   loggedInUser,
 ) => {
+  if (!mongoose.isValidObjectId(id)) {
+    throw createAppError("Invalid question id", 400);
+  }
+  if (!isNonBlankString(title)) {
+    throw createAppError("Title is required", 400);
+  }
+  if (!isNonBlankString(description)) {
+    throw createAppError("Description is required", 400);
+  }
+  const tagNames = parseTagNames(tags);
+  if (tagNames.length === 0) {
+    throw createAppError("At least one tag is required", 400);
+  }
+
   const question = await Question.findById(id);
 
   if (!question) {
     throw createAppError("Question not found", 404);
   }
 
-  if (
-    question.author.toString() !== loggedInUser.id.toString() &&
-    !loggedInUser.isAdmin
-  ) {
+  // Author only: admins may delete, but not edit, other users' questions
+  if (question.author.toString() !== loggedInUser.id.toString()) {
     throw createAppError("Not authorized to update this question", 403);
   }
 
-  const tagArray = tags
-    .trim()
-    .split(",")
-    .map((tag) => tag.trim());
-
-  const tagIds = await Promise.all(
-    tagArray.map(async (tag) => {
-      const existingTag = await Tag.findOne({ name: tag });
-      if (existingTag) {
-        return existingTag._id;
-      }
-      const newTag = new Tag({ name: tag });
-      await newTag.save();
-      return newTag._id;
-    }),
-  );
+  const tagIds = await resolveTagIds(tagNames);
 
   const updatedQuestion = await Question.findByIdAndUpdate(
     id,
-    { title, description, tags: tagIds },
+    {
+      title: title.trim(),
+      description: description.trim(),
+      tags: tagIds,
+      editedAt: new Date(),
+    },
     { new: true },
-  );
+  )
+    .populate({ path: "author", select: "name" })
+    .populate("tags");
 
   if (!updatedQuestion) {
     throw createAppError("Question not found", 404);

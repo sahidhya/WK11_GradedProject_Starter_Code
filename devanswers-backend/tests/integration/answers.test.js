@@ -273,7 +273,7 @@ describe("Answers API", () => {
     expect(response.body.message).toBe("Not authorized to update this answer");
   });
 
-  it("PUT /api/answers/:answerId -> should allow an admin to update any answer", async () => {
+  it("PUT /api/answers/:answerId -> should return 403 for an admin who is not the author", async () => {
     const adminEmail = `admin+${Date.now()}@example.com`;
     await request(app)
       .post("/api/auth/register")
@@ -295,9 +295,69 @@ describe("Answers API", () => {
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ answerText: "Admin updated this answer" });
 
+    expect(response.status).toBe(403);
+    expect(response.body.success).toBe(false);
+
+    const unchanged = await Answer.findById(answer._id);
+    expect(unchanged.answerText).toBe(answer.answerText);
+    expect(unchanged.editedAt ?? null).toBeNull();
+  });
+
+  it("PUT /api/answers/:answerId -> should return the populated answer with editedAt set", async () => {
+    const answer = await createAnswer({ author: mockUser._id });
+
+    const response = await request(app)
+      .put(`/api/answers/${answer._id}`)
+      .set("Authorization", `Bearer ${jwtToken}`)
+      .send({ answerText: "  Trimmed new text  " });
+
     expect(response.status).toBe(200);
-    expect(response.body.success).toBe(true);
-    expect(response.body.data.answerText).toBe("Admin updated this answer");
+    expect(response.body.data.answerText).toBe("Trimmed new text");
+    expect(response.body.data.author.name).toBeTruthy();
+    expect(response.body.data.editedAt).toBeTruthy();
+  });
+
+  it("PUT /api/answers/:answerId -> should return 400 for blank or invalid text and save nothing", async () => {
+    const answer = await createAnswer({ author: mockUser._id });
+
+    for (const body of [{ answerText: "   " }, { answerText: "" }, {}]) {
+      const response = await request(app)
+        .put(`/api/answers/${answer._id}`)
+        .set("Authorization", `Bearer ${jwtToken}`)
+        .send(body);
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    }
+
+    const unchanged = await Answer.findById(answer._id);
+    expect(unchanged.answerText).toBe(answer.answerText);
+    expect(unchanged.editedAt ?? null).toBeNull();
+  });
+
+  it("PUT /api/answers/:answerId -> should return 400 for a malformed id", async () => {
+    const response = await request(app)
+      .put("/api/answers/not-an-id")
+      .set("Authorization", `Bearer ${jwtToken}`)
+      .send({ answerText: "Text" });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("GET /api/questions/:id -> should show editedAt on the edited answer only", async () => {
+    const question = await createQuestion({ author: mockUser._id });
+    const edited = await createAnswer({ author: mockUser._id, question, answerText: "Will be edited" });
+    await createAnswer({ author: mockUser._id, question, answerText: "Stays untouched" });
+
+    await request(app)
+      .put(`/api/answers/${edited._id}`)
+      .set("Authorization", `Bearer ${jwtToken}`)
+      .send({ answerText: "Edited text" });
+
+    const response = await request(app).get(`/api/questions/${question._id}`);
+    const byText = Object.fromEntries(response.body.data.answers.map((a) => [a.answerText, a]));
+    expect(byText["Edited text"].editedAt).toBeTruthy();
+    expect(byText["Stays untouched"].editedAt ?? null).toBeNull();
   });
 
   // -------------------

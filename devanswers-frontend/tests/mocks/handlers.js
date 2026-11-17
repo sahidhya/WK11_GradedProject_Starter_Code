@@ -179,6 +179,55 @@ export const handlers = [
       },
     });
   }),
+  // ── Edit endpoints (author only; the real API returns populated author/tags,
+  //    and no `answers` for a question) ──────────────────────────────────────
+  http.put(`${BASE_URL}/questions/:id`, async ({ request, params }) => {
+    if (!request.headers.get("Authorization")) {
+      return HttpResponse.json({ message: "No token provided" }, { status: 401 });
+    }
+    const { title, description, tags } = await request.json();
+    if (!title?.trim()) {
+      return HttpResponse.json({ message: "Title is required" }, { status: 400 });
+    }
+    const question = mockQuestions.find((q) => q._id === params.id);
+    if (!question) {
+      return HttpResponse.json({ message: "Question not found" }, { status: 404 });
+    }
+    return HttpResponse.json({
+      success: true,
+      data: {
+        _id: question._id,
+        title: title.trim(),
+        description: description.trim(),
+        tags: tags
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean)
+          .map((name) => ({ _id: `tag-${name}`, name })),
+        author: question.author,
+        editedAt: "2026-02-01T00:00:00.000Z",
+      },
+    });
+  }),
+
+  http.put(`${BASE_URL}/answers/:answerId`, async ({ request, params }) => {
+    if (!request.headers.get("Authorization")) {
+      return HttpResponse.json({ message: "No token provided" }, { status: 401 });
+    }
+    const { answerText } = await request.json();
+    if (!answerText?.trim()) {
+      return HttpResponse.json({ message: "Answer text is required" }, { status: 400 });
+    }
+    const answer = mockAnswers.find((a) => a._id === params.answerId);
+    if (!answer) {
+      return HttpResponse.json({ message: "Answer not found" }, { status: 404 });
+    }
+    return HttpResponse.json({
+      success: true,
+      data: { ...answer, answerText: answerText.trim(), editedAt: "2026-02-01T00:00:00.000Z" },
+    });
+  }),
+
   // ── Bookmark endpoints (auth required) ────────────────────────────────────
   http.get(`${BASE_URL}/users/me/bookmarks/ids`, ({ request }) => {
     if (!request.headers.get("Authorization")) {

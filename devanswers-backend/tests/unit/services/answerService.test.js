@@ -166,71 +166,116 @@ describe('answerService', () => {
   });
 
   describe('updateAnswerService', () => {
-    // Success case
-    it('should update and return answer', async () => {
-      // Arrange
-      const loggedInUser = { id: 'user123', isAdmin: false };
-      const mockAnswer = {
-        _id: 'answer123',
-        answerText: 'Old text',
-        author: { toString: () => 'user123' },
-        save: vi.fn().mockResolvedValue(true),
+    const AID = '507f1f77bcf86cd799439022';
+    const author = { id: 'user123', isAdmin: false };
+
+    const chain = (result) => {
+      const c = {
+        populate: vi.fn(() => c),
+        then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
       };
-      const mockPopulatedAnswer = {
-        _id: 'answer123',
+      return c;
+    };
+
+    const existingAnswer = () => ({
+      _id: AID,
+      answerText: 'Old text',
+      author: { toString: () => 'user123' },
+      save: vi.fn().mockResolvedValue(true),
+    });
+
+    // Success case
+    it('should update, set editedAt and return the populated answer', async () => {
+      const mockAnswer = existingAnswer();
+      const populated = {
+        _id: AID,
         answerText: 'Updated text',
         author: { _id: 'user123', name: 'Test User' },
       };
-
+      const populatedQuery = chain(populated);
       Answer.findById = vi.fn()
         .mockResolvedValueOnce(mockAnswer)
-        .mockReturnValueOnce({
-          populate: vi.fn().mockResolvedValue(mockPopulatedAnswer),
-        });
+        .mockReturnValueOnce(populatedQuery);
 
-      // Act
-      const result = await updateAnswerService('answer123', 'Updated text', loggedInUser);
+      const result = await updateAnswerService(AID, 'Updated text', author);
 
-      // Assert
-      expect(Answer.findById).toHaveBeenCalledWith('answer123');
+      expect(Answer.findById).toHaveBeenCalledWith(AID);
+      expect(mockAnswer.answerText).toBe('Updated text');
+      expect(mockAnswer.editedAt).toBeInstanceOf(Date);
       expect(mockAnswer.save).toHaveBeenCalled();
-      expect(result).toEqual(mockPopulatedAnswer);
+      expect(populatedQuery.populate).toHaveBeenCalledWith('author', 'name');
+      expect(result).toEqual(populated);
+    });
+
+    it('should save trimmed text', async () => {
+      const mockAnswer = existingAnswer();
+      Answer.findById = vi.fn()
+        .mockResolvedValueOnce(mockAnswer)
+        .mockReturnValueOnce(chain({}));
+
+      await updateAnswerService(AID, '  Updated text  ', author);
+
+      expect(mockAnswer.answerText).toBe('Updated text');
     });
 
     // Error case - answer not found
     it('should throw 404 if answer not found during update', async () => {
-      // Arrange
-      const loggedInUser = { id: 'user123', isAdmin: false };
       Answer.findById = vi.fn().mockResolvedValue(null);
 
-      // Act & Assert
       await expect(
-        updateAnswerService('nonexistent', 'Updated text', loggedInUser)
-      ).rejects.toThrow('Answer not found');
-      await expect(
-        updateAnswerService('nonexistent', 'Updated text', loggedInUser)
-      ).rejects.toMatchObject({ statusCode: 404 });
+        updateAnswerService(AID, 'Updated text', author)
+      ).rejects.toMatchObject({ statusCode: 404, message: 'Answer not found' });
     });
 
-    // Authorization case - not author or admin
-    it('should throw 403 if user is not the author or admin', async () => {
-      // Arrange
-      const loggedInUser = { id: 'otherUser', isAdmin: false };
-      const mockAnswer = {
-        _id: 'answer123',
-        author: { toString: () => 'user123' },
-        answerText: 'Original text',
-        save: vi.fn(),
-      };
+    // Error case - malformed id
+    it('should throw 400 for a malformed answer id', async () => {
+      Answer.findById = vi.fn();
+
+      await expect(
+        updateAnswerService('not-an-id', 'Updated text', author)
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(Answer.findById).not.toHaveBeenCalled();
+    });
+
+    // Authorization cases
+    it('should throw 403 if user is not the author', async () => {
+      const mockAnswer = existingAnswer();
       Answer.findById = vi.fn().mockResolvedValue(mockAnswer);
 
-      // Act & Assert
       await expect(
-        updateAnswerService('answer123', 'Hacked text', loggedInUser)
-      ).rejects.toThrow('Not authorized to update this answer');
+        updateAnswerService(AID, 'Hacked text', { id: 'otherUser', isAdmin: false })
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: 'Not authorized to update this answer',
+      });
+      expect(mockAnswer.save).not.toHaveBeenCalled();
+      expect(mockAnswer.editedAt).toBeUndefined();
+    });
+
+    it('should throw 403 for an admin who is not the author', async () => {
+      const mockAnswer = existingAnswer();
+      Answer.findById = vi.fn().mockResolvedValue(mockAnswer);
+
       await expect(
-        updateAnswerService('answer123', 'Hacked text', loggedInUser)
+        updateAnswerService(AID, 'Admin edit', { id: 'admin123', isAdmin: true })
       ).rejects.toMatchObject({ statusCode: 403 });
+      expect(mockAnswer.save).not.toHaveBeenCalled();
+    });
+
+    // Validation cases
+    it.each([
+      ['blank text', '   '],
+      ['empty text', ''],
+      ['missing text', undefined],
+      ['non-string text', 42],
+    ])('should throw 400 and save nothing for %s', async (_name, text) => {
+      const mockAnswer = existingAnswer();
+      Answer.findById = vi.fn().mockResolvedValue(mockAnswer);
+
+      await expect(
+        updateAnswerService(AID, text, author)
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(mockAnswer.save).not.toHaveBeenCalled();
     });
   });
 

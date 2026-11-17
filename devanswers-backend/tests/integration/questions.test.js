@@ -329,7 +329,7 @@ describe('Questions API', () => {
     expect(response.body.message).toBe('Not authorized to update this question');
   });
 
-  it('PUT /api/questions/:id -> should allow an admin to update any question', async () => {
+  it('PUT /api/questions/:id -> should return 403 for an admin who is not the author', async () => {
     const adminEmail = `admin+${Date.now()}@example.com`;
     await request(app).post('/api/auth/register').send({ name: 'Admin', email: adminEmail, password: 'password123', isAdmin: true });
     const adminLogin = await request(app).post('/api/auth/login').send({ email: adminEmail, password: 'password123' });
@@ -342,9 +342,109 @@ describe('Questions API', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ title: 'Admin Updated Title', description: 'Admin Updated', tags: 'admin' });
 
+    expect(response.status).toBe(403);
+    expect(response.body.success).toBe(false);
+
+    const unchanged = await Question.findById(question._id);
+    expect(unchanged.title).toBe(question.title);
+    expect(unchanged.editedAt ?? null).toBeNull();
+  });
+
+  it('PUT /api/questions/:id -> should return the populated question with editedAt set', async () => {
+    const question = await createQuestion({ author: mockUser._id });
+
+    const response = await request(app)
+      .put(`/api/questions/${question._id}`)
+      .set('Authorization', `Bearer ${jwtToken}`)
+      .send({ title: '  New title  ', description: 'New description', tags: 'alpha, beta' });
+
     expect(response.status).toBe(200);
-    expect(response.body.success).toBe(true);
-    expect(response.body.data.title).toBe('Admin Updated Title');
+    const data = response.body.data;
+    expect(data.title).toBe('New title');
+    expect(data.author).toMatchObject({ _id: mockUser._id.toString() });
+    expect(data.author.name).toBeTruthy();
+    expect(data.tags.map((t) => t.name).sort()).toEqual(['alpha', 'beta']);
+    expect(data.editedAt).toBeTruthy();
+  });
+
+  it('PUT /api/questions/:id -> should drop duplicate tags', async () => {
+    const question = await createQuestion({ author: mockUser._id });
+
+    const response = await request(app)
+      .put(`/api/questions/${question._id}`)
+      .set('Authorization', `Bearer ${jwtToken}`)
+      .send({ title: 'T', description: 'D', tags: 'dup, dup, other' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.tags).toHaveLength(2);
+  });
+
+  it('PUT /api/questions/:id -> should return 400 for blank or invalid input and save nothing', async () => {
+    const question = await createQuestion({ author: mockUser._id });
+    const invalidBodies = [
+      { title: '   ', description: 'D', tags: 't' },
+      { title: 'T', description: '', tags: 't' },
+      { title: 'T', description: 'D', tags: '' },
+      { title: 'T', description: 'D', tags: ' , ' },
+      { title: 'T', description: 'D' },
+    ];
+
+    for (const body of invalidBodies) {
+      const response = await request(app)
+        .put(`/api/questions/${question._id}`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send(body);
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    }
+
+    const unchanged = await Question.findById(question._id);
+    expect(unchanged.title).toBe(question.title);
+    expect(unchanged.editedAt ?? null).toBeNull();
+  });
+
+  it('PUT /api/questions/:id -> should return 400 for a malformed id', async () => {
+    const response = await request(app)
+      .put('/api/questions/not-an-id')
+      .set('Authorization', `Bearer ${jwtToken}`)
+      .send({ title: 'T', description: 'D', tags: 't' });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('PUT /api/questions/:id -> should move editedAt forward on a second edit', async () => {
+    const question = await createQuestion({ author: mockUser._id });
+    const edit = (title) =>
+      request(app)
+        .put(`/api/questions/${question._id}`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({ title, description: 'D', tags: 't' });
+
+    const first = await edit('First edit');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const second = await edit('Second edit');
+
+    expect(new Date(second.body.data.editedAt).getTime()).toBeGreaterThan(
+      new Date(first.body.data.editedAt).getTime()
+    );
+  });
+
+  it('GET /api/questions/:id -> should show editedAt only after an edit, not after views', async () => {
+    const question = await createQuestion({ author: mockUser._id });
+
+    await request(app).get(`/api/questions/${question._id}`);
+    const beforeEdit = await request(app).get(`/api/questions/${question._id}`);
+    expect(beforeEdit.body.data.editedAt ?? null).toBeNull();
+
+    await request(app)
+      .put(`/api/questions/${question._id}`)
+      .set('Authorization', `Bearer ${jwtToken}`)
+      .send({ title: 'Edited', description: 'D', tags: 't' });
+
+    const afterEdit = await request(app).get(`/api/questions/${question._id}`);
+    expect(afterEdit.body.data.title).toBe('Edited');
+    expect(afterEdit.body.data.editedAt).toBeTruthy();
   });
 
   // -------------------

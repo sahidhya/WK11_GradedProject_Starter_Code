@@ -28,6 +28,11 @@ const answerSchema = new mongoose.Schema({
     voteCount: {
         type: Number,
         default: 0,
+    },
+    // Set only by the update service (updatedAt is also bumped by votes)
+    editedAt: {
+        type: Date,
+        default: null,
     }
 }, { timestamps: true });
 

@@ -3,11 +3,16 @@ import {
   getAllQuestions,
   getQuestionById,
   createQuestion,
+  updateQuestion as updateQuestionRequest,
   upvoteQuestion,
   downvoteQuestion,
   createAnswerForQuestion,
 } from "../services/questionService.js";
-import { upvoteAnswer, downvoteAnswer } from "../services/answerService.js";
+import {
+  upvoteAnswer,
+  downvoteAnswer,
+  updateAnswer as updateAnswerRequest,
+} from "../services/answerService.js";
 
 const initialState = {
   questions: [],
@@ -122,6 +127,42 @@ export const postAnswer = createAsyncThunk(
   },
 );
 
+// Edit thunks: the UI tracks "saving" per post and shows the rejected message
+// inside its own form, so there are deliberately no pending/rejected reducers.
+// Setting state.loading or state.error here would replace the whole question
+// page with a spinner/error and unmount the open edit form.
+export const updateQuestion = createAsyncThunk(
+  "question/updateQuestion",
+  async ({ id, title, description, tags }, { getState, rejectWithValue }) => {
+    try {
+      const { token } = getState().user.userInfo || {};
+      return await updateQuestionRequest(id, { title, description, tags }, token);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to update question",
+      );
+    }
+  },
+);
+
+export const updateAnswer = createAsyncThunk(
+  "question/updateAnswer",
+  async ({ answerId, answerText }, { getState, rejectWithValue }) => {
+    try {
+      const { token } = getState().user.userInfo || {};
+      return await updateAnswerRequest(answerId, answerText, token);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to update answer",
+      );
+    }
+  },
+);
+
 const questionSlice = createSlice({
   name: "question",
   initialState,
@@ -218,6 +259,30 @@ const questionSlice = createSlice({
       .addCase(postAnswer.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error.message;
+      })
+      // Merge only the edited fields: the PUT response has no `answers`
+      .addCase(updateQuestion.fulfilled, (state, action) => {
+        const { _id, title, description, tags, editedAt } = action.payload;
+        const edited = { title, description, tags, editedAt };
+        if (state.currentQuestion && state.currentQuestion._id === _id) {
+          Object.assign(state.currentQuestion, edited);
+        }
+        const questionIndex = state.questions.findIndex((q) => q._id === _id);
+        if (questionIndex !== -1) {
+          Object.assign(state.questions[questionIndex], edited);
+        }
+      })
+      .addCase(updateAnswer.fulfilled, (state, action) => {
+        if (!state.currentQuestion) return;
+        const answerIndex = state.currentQuestion.answers.findIndex(
+          (ans) => ans._id === action.payload._id,
+        );
+        if (answerIndex !== -1) {
+          state.currentQuestion.answers[answerIndex] = {
+            ...state.currentQuestion.answers[answerIndex],
+            ...action.payload,
+          };
+        }
       });
   },
 });

@@ -324,115 +324,169 @@ describe("questionService", () => {
   });
 
   describe("updateQuestionService", () => {
-    // Success case
-    it("should update and return question", async () => {
-      // Arrange
-      const loggedInUser = { id: "user123", isAdmin: false };
-      const mockExistingQuestion = {
-        _id: "question123",
-        author: { toString: () => "user123" },
-      };
-      const mockUpdatedQuestion = {
-        _id: "question123",
-        title: "Updated Title",
-        description: "Updated Description",
-        tags: ["tag1", "tag2"],
-      };
+    const QID = "507f1f77bcf86cd799439011";
+    const author = { id: "user123", isAdmin: false };
+    const existingQuestion = () => ({
+      _id: QID,
+      author: { toString: () => "user123" },
+    });
 
+    // Mongoose queries are chainable and awaitable
+    const chain = (result) => {
+      const c = {
+        populate: vi.fn(() => c),
+        then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+      };
+      return c;
+    };
+
+    const setupTags = () => {
       Tag.findOne = vi.fn().mockResolvedValue(null);
+      let n = 0;
       Tag.mockImplementation(() => ({
-        _id: "tag123",
+        _id: `tag${++n}`,
         save: vi.fn().mockResolvedValue(true),
       }));
+    };
 
-      Question.findById = vi.fn().mockResolvedValue(mockExistingQuestion);
-      Question.findByIdAndUpdate = vi
-        .fn()
-        .mockResolvedValue(mockUpdatedQuestion);
+    beforeEach(() => {
+      setupTags();
+      Question.findById = vi.fn().mockResolvedValue(existingQuestion());
+      Question.findByIdAndUpdate = vi.fn().mockReturnValue(chain({ _id: QID }));
+    });
 
-      // Act
+    // Success case
+    it("should update, set editedAt and return the populated question", async () => {
+      const populated = {
+        _id: QID,
+        title: "Updated Title",
+        description: "Updated Description",
+        author: { _id: "user123", name: "Ann" },
+        tags: [{ _id: "tag1", name: "tag1" }],
+      };
+      const query = chain(populated);
+      Question.findByIdAndUpdate = vi.fn().mockReturnValue(query);
+
       const result = await updateQuestionService(
-        "question123",
+        QID,
         "Updated Title",
         "Updated Description",
         "tag1, tag2",
-        loggedInUser,
+        author,
       );
 
-      // Assert
-      expect(Question.findById).toHaveBeenCalledWith("question123");
+      expect(Question.findById).toHaveBeenCalledWith(QID);
       expect(Question.findByIdAndUpdate).toHaveBeenCalledWith(
-        "question123",
+        QID,
         expect.objectContaining({
           title: "Updated Title",
           description: "Updated Description",
+          editedAt: expect.any(Date),
         }),
         { new: true },
       );
-      expect(result).toEqual(mockUpdatedQuestion);
+      expect(query.populate).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "author" }),
+      );
+      expect(query.populate).toHaveBeenCalledWith("tags");
+      expect(result).toEqual(populated);
+    });
+
+    it("should save trimmed values", async () => {
+      await updateQuestionService(QID, "  Title  ", "  Desc  ", " a ", author);
+
+      expect(Question.findByIdAndUpdate).toHaveBeenCalledWith(
+        QID,
+        expect.objectContaining({ title: "Title", description: "Desc" }),
+        { new: true },
+      );
+      expect(Tag.findOne).toHaveBeenCalledWith({ name: "a" });
+    });
+
+    it("should drop empty and duplicate tags", async () => {
+      await updateQuestionService(QID, "Title", "Desc", "a, a, b, ,", author);
+
+      expect(Tag.findOne).toHaveBeenCalledTimes(2);
+      expect(Tag.findOne).toHaveBeenCalledWith({ name: "a" });
+      expect(Tag.findOne).toHaveBeenCalledWith({ name: "b" });
+      const update = Question.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.tags).toHaveLength(2);
+    });
+
+    it("should reuse the existing tag when a concurrent request created it first", async () => {
+      Tag.findOne = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ _id: "existingTag" });
+      Tag.mockImplementation(() => ({
+        _id: "newTag",
+        save: vi.fn().mockRejectedValue({ code: 11000 }),
+      }));
+
+      await updateQuestionService(QID, "Title", "Desc", "race", author);
+
+      const update = Question.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.tags).toEqual(["existingTag"]);
     });
 
     // Error case - question not found
     it("should throw 404 if question not found during update", async () => {
-      // Arrange
-      const loggedInUser = { id: "user123", isAdmin: false };
-      Tag.findOne = vi.fn().mockResolvedValue(null);
-      Tag.mockImplementation(() => ({
-        _id: "tag123",
-        save: vi.fn().mockResolvedValue(true),
-      }));
       Question.findById = vi.fn().mockResolvedValue(null);
 
-      // Act & Assert
       await expect(
-        updateQuestionService(
-          "nonexistent",
-          "Title",
-          "Description",
-          "tag",
-          loggedInUser,
-        ),
-      ).rejects.toThrow("Question not found");
-      await expect(
-        updateQuestionService(
-          "nonexistent",
-          "Title",
-          "Description",
-          "tag",
-          loggedInUser,
-        ),
-      ).rejects.toMatchObject({ statusCode: 404 });
+        updateQuestionService(QID, "Title", "Description", "tag", author),
+      ).rejects.toMatchObject({ statusCode: 404, message: "Question not found" });
     });
 
-    // Authorization case - not author or admin
-    it("should throw 403 if user is not the author or admin", async () => {
-      // Arrange
-      const loggedInUser = { id: "otherUser", isAdmin: false };
-      const mockQuestion = {
-        _id: "question123",
-        author: { toString: () => "user123" },
-      };
-      Question.findById = vi.fn().mockResolvedValue(mockQuestion);
+    // Error case - malformed id
+    it("should throw 400 for a malformed question id", async () => {
+      await expect(
+        updateQuestionService("not-an-id", "Title", "Description", "tag", author),
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(Question.findById).not.toHaveBeenCalled();
+    });
 
-      // Act & Assert
+    // Authorization cases
+    it("should throw 403 if user is not the author", async () => {
+      const other = { id: "otherUser", isAdmin: false };
+
       await expect(
-        updateQuestionService(
-          "question123",
-          "Hacked",
-          "Hacked",
-          "tag",
-          loggedInUser,
-        ),
-      ).rejects.toThrow("Not authorized to update this question");
+        updateQuestionService(QID, "Hacked", "Hacked", "tag", other),
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: "Not authorized to update this question",
+      });
+      expect(Question.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("should throw 403 for an admin who is not the author", async () => {
+      const admin = { id: "admin123", isAdmin: true };
+
       await expect(
-        updateQuestionService(
-          "question123",
-          "Hacked",
-          "Hacked",
-          "tag",
-          loggedInUser,
-        ),
+        updateQuestionService(QID, "Admin edit", "Admin edit", "tag", admin),
       ).rejects.toMatchObject({ statusCode: 403 });
+      expect(Question.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    // Validation cases
+    it.each([
+      ["blank title", "   ", "Desc", "tag"],
+      ["empty title", "", "Desc", "tag"],
+      ["missing title", undefined, "Desc", "tag"],
+      ["non-string title", 123, "Desc", "tag"],
+      ["blank description", "Title", "   ", "tag"],
+      ["missing description", "Title", undefined, "tag"],
+      ["missing tags", "Title", "Desc", undefined],
+      ["empty tags", "Title", "Desc", ""],
+      ["tags with only separators", "Title", "Desc", " , , "],
+      ["array tags", "Title", "Desc", ["a"]],
+    ])("should throw 400 and save nothing for %s", async (_name, title, description, tags) => {
+      await expect(
+        updateQuestionService(QID, title, description, tags, author),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(Question.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(Tag.findOne).not.toHaveBeenCalled();
     });
   });
 
