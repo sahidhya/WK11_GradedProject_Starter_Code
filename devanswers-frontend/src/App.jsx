@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
 
 import Home from './pages/Question/Home.jsx';
@@ -9,8 +11,19 @@ import Profile from './pages/Profile/Profile.jsx';
 import Tags from './pages/Tags/Tags.jsx';
 import BaseLayout from './layouts/BaseLayout.jsx';
 import SideBarLayout from './layouts/SideBarLayout.jsx';
+import { fetchBookmarkIds } from './reducers/bookmarkSlice.js';
 
 function App() {
+  const dispatch = useDispatch();
+  const token = useSelector((state) => state.user.userInfo?.token);
+
+  // Learn which questions are already saved on app load and after login.
+  // Logging out resets the bookmark slice, so another user never sees them.
+  useEffect(() => {
+    if (token) {
+      dispatch(fetchBookmarkIds());
+    }
+  }, [token, dispatch]);
 
   return (
     <Router>

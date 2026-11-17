@@ -102,4 +102,59 @@ describe('QuestionList Component', () => {
     renderQuestionList();
     expect(screen.getByText('Newest')).toBeInTheDocument();
   });
+  it('renders custom empty-state text when emptyTitle and emptyMessage are given', () => {
+    render(
+      <Provider store={createMockStore()}>
+        <BrowserRouter>
+          <QuestionList
+            questions={[]}
+            emptyTitle="No saved questions yet"
+            emptyMessage="Click the bookmark icon to save one."
+          />
+        </BrowserRouter>
+      </Provider>
+    );
+    expect(screen.getByText('No saved questions yet')).toBeInTheDocument();
+    expect(screen.getByText('Click the bookmark icon to save one.')).toBeInTheDocument();
+    expect(screen.queryByText(/No questions found/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the default empty-state text when no empty props are given', () => {
+    renderQuestionList([]);
+    expect(screen.getByText('No questions found')).toBeInTheDocument();
+    expect(screen.getByText(/be the first to ask/i)).toBeInTheDocument();
+  });
+
+  it('clamps to the last page when the list shrinks (e.g. the last item is unsaved)', async () => {
+    const makeQuestions = (n) =>
+      Array.from({ length: n }, (_, i) => ({
+        _id: `bulk-${i}`,
+        title: `Bulk question ${i}`,
+        description: `Bulk description ${i}`,
+        voteCount: 0,
+        answerCount: 0,
+        tags: [],
+        author: { _id: 'user-2', name: 'Alice' },
+        // Newest first by default sort: higher i is newer
+        createdAt: new Date(2026, 0, 1 + i).toISOString(),
+      }));
+    const store = createMockStore();
+    const ui = (questions) => (
+      <Provider store={store}>
+        <BrowserRouter>
+          <QuestionList questions={questions} />
+        </BrowserRouter>
+      </Provider>
+    );
+
+    // 6 questions -> 2 pages (5 per page). Go to page 2: only the oldest shows.
+    const { rerender } = render(ui(makeQuestions(6)));
+    await userEvent.click(screen.getByText('2'));
+    expect(screen.getByText('Bulk question 0')).toBeInTheDocument();
+
+    // Shrink to 5 questions -> only 1 page. Must show page 1, not an empty page.
+    rerender(ui(makeQuestions(5).slice(0, 5)));
+    expect(screen.queryByText(/No questions found/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Bulk question 4')).toBeInTheDocument();
+  });
 });

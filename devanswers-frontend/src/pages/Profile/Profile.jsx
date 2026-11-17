@@ -1,15 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { FaUser, FaEnvelope, FaSave, FaEdit } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { USER_API } from '../../config/config.js';
+import QuestionList from '../../components/Question/QuestionList.jsx';
+import {
+  fetchBookmarkedQuestions,
+  selectSavedQuestions,
+  selectBookmarkListStatus,
+  selectBookmarkError,
+} from '../../reducers/bookmarkSlice.js';
 import './Profile.css';
 
 const Profile = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { userInfo } = useSelector((state) => state.user);
+  const savedQuestions = useSelector(selectSavedQuestions);
+  const savedStatus = useSelector(selectBookmarkListStatus);
+  const savedError = useSelector(selectBookmarkError);
   const isAuthenticated = !!userInfo;
   
   const [isEditing, setIsEditing] = useState(false);
@@ -39,6 +50,12 @@ const Profile = () => {
       fetchUserStats();
     }
   }, [isAuthenticated, navigate, userInfo]);
+
+  useEffect(() => {
+    if (userInfo?.token) {
+      dispatch(fetchBookmarkedQuestions());
+    }
+  }, [userInfo?.token, dispatch]);
 
   const fetchUserStats = async () => {
     try {
@@ -303,6 +320,28 @@ const Profile = () => {
                     </small>
                   </Alert>
                 </div>
+              )}
+            </Card.Body>
+          </Card>
+
+          {/* Saved Questions */}
+          <Card className="mt-4 profile-body-card">
+            <Card.Body className="p-4">
+              <h4 className="mb-3">Saved Questions</h4>
+              {savedStatus === 'pending' && savedQuestions.length === 0 ? (
+                <div className="text-center py-4">
+                  <Spinner animation="border" size="sm" />
+                </div>
+              ) : savedStatus === 'rejected' && savedQuestions.length === 0 ? (
+                <Alert variant="danger">
+                  Could not load your saved questions{savedError ? `: ${savedError}` : '.'}
+                </Alert>
+              ) : (
+                <QuestionList
+                  questions={savedQuestions}
+                  emptyTitle="No saved questions yet"
+                  emptyMessage="Click the bookmark icon on any question to save it here."
+                />
               )}
             </Card.Body>
           </Card>

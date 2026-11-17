@@ -42,6 +42,13 @@ export const USER_API = {
   STATS: (userId) => `/auth/stats/${userId}`,
 };
 
+// Bookmark API Endpoints (all require auth; "me" is the logged-in user)
+export const BOOKMARK_API = {
+  IDS: "/users/me/bookmarks/ids",
+  LIST: "/users/me/bookmarks",
+  ITEM: (questionId) => `/users/me/bookmarks/${questionId}`,
+};
+
 // AI API Endpoints
 export const AI_API = {
   IMPROVE_QUESTION: '/questions/improve',

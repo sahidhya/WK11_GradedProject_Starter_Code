@@ -6,7 +6,11 @@ import './QuestionList.css';
 
 const QUESTIONS_PER_PAGE = 5;
 
-const QuestionList = ({ questions = [] }) => {
+const QuestionList = ({
+    questions = [],
+    emptyTitle = 'No questions found',
+    emptyMessage = 'Try adjusting your search or be the first to ask!',
+}) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('newest');
@@ -31,7 +35,9 @@ const QuestionList = ({ questions = [] }) => {
     });
 
     const totalPages = Math.ceil(sorted.length / QUESTIONS_PER_PAGE);
-    const start = (currentPage - 1) * QUESTIONS_PER_PAGE;
+    // Clamp when the list shrinks (e.g. the last item on the last page is unsaved)
+    const safePage = Math.min(currentPage, Math.max(totalPages, 1));
+    const start = (safePage - 1) * QUESTIONS_PER_PAGE;
     const currentQuestions = sorted.slice(start, start + QUESTIONS_PER_PAGE);
 
     const handlePageChange = (page) => {
@@ -72,8 +78,8 @@ const QuestionList = ({ questions = [] }) => {
                     ))
                 ) : (
                     <div className="text-center py-5">
-                        <h4 className="text-muted">No questions found</h4>
-                        <p className="text-muted">Try adjusting your search or be the first to ask!</p>
+                        <h4 className="text-muted">{emptyTitle}</h4>
+                        <p className="text-muted">{emptyMessage}</p>
                     </div>
                 )}
             </div>
@@ -82,34 +88,34 @@ const QuestionList = ({ questions = [] }) => {
             {totalPages > 1 && (
                 <div className="d-flex justify-content-center mt-4">
                     <Pagination>
-                        <Pagination.First onClick={() => handlePageChange(1)} disabled={currentPage === 1} />
-                        <Pagination.Prev onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} />
+                        <Pagination.First onClick={() => handlePageChange(1)} disabled={safePage === 1} />
+                        <Pagination.Prev onClick={() => handlePageChange(safePage - 1)} disabled={safePage === 1} />
 
                         {[...Array(totalPages)].map((_, i) => {
                             const page = i + 1;
                             if (
                                 page === 1 ||
                                 page === totalPages ||
-                                (page >= currentPage - 1 && page <= currentPage + 1)
+                                (page >= safePage - 1 && page <= safePage + 1)
                             ) {
                                 return (
                                     <Pagination.Item
                                         key={page}
-                                        active={page === currentPage}
+                                        active={page === safePage}
                                         onClick={() => handlePageChange(page)}
                                     >
                                         {page}
                                     </Pagination.Item>
                                 );
                             }
-                            if (page === currentPage - 2 || page === currentPage + 2) {
+                            if (page === safePage - 2 || page === safePage + 2) {
                                 return <Pagination.Ellipsis key={page} disabled />;
                             }
                             return null;
                         })}
 
-                        <Pagination.Next onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} />
-                        <Pagination.Last onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages} />
+                        <Pagination.Next onClick={() => handlePageChange(safePage + 1)} disabled={safePage === totalPages} />
+                        <Pagination.Last onClick={() => handlePageChange(totalPages)} disabled={safePage === totalPages} />
                     </Pagination>
                 </div>
             )}

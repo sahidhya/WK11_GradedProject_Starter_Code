@@ -5,6 +5,8 @@ import {
   mockAnswers,
   mockTags,
   mockAuthResponse,
+  mockBookmarkIds,
+  mockSavedQuestions,
 } from "./mockData";
 
 const BASE_URL = "http://localhost:3000/api";
@@ -175,6 +177,40 @@ export const handlers = [
         totalVotesReceived: 12,
         reputation: 75,
       },
+    });
+  }),
+  // ── Bookmark endpoints (auth required) ────────────────────────────────────
+  http.get(`${BASE_URL}/users/me/bookmarks/ids`, ({ request }) => {
+    if (!request.headers.get("Authorization")) {
+      return HttpResponse.json({ message: "No token provided" }, { status: 401 });
+    }
+    return HttpResponse.json({ success: true, data: mockBookmarkIds });
+  }),
+
+  http.get(`${BASE_URL}/users/me/bookmarks`, ({ request }) => {
+    if (!request.headers.get("Authorization")) {
+      return HttpResponse.json({ message: "No token provided" }, { status: 401 });
+    }
+    return HttpResponse.json({ success: true, data: mockSavedQuestions });
+  }),
+
+  http.put(`${BASE_URL}/users/me/bookmarks/:questionId`, ({ request, params }) => {
+    if (!request.headers.get("Authorization")) {
+      return HttpResponse.json({ message: "No token provided" }, { status: 401 });
+    }
+    return HttpResponse.json({
+      success: true,
+      data: { questionId: params.questionId, isBookmarked: true },
+    });
+  }),
+
+  http.delete(`${BASE_URL}/users/me/bookmarks/:questionId`, ({ request, params }) => {
+    if (!request.headers.get("Authorization")) {
+      return HttpResponse.json({ message: "No token provided" }, { status: 401 });
+    }
+    return HttpResponse.json({
+      success: true,
+      data: { questionId: params.questionId, isBookmarked: false },
     });
   }),
 ];

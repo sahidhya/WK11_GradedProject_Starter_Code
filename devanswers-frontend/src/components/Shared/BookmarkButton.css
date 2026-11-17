@@ -1,0 +1,24 @@
+.bookmark-btn {
+  border: none;
+  background: none;
+  padding: 0.25rem;
+  line-height: 1;
+  font-size: 1.1rem;
+  color: var(--text-muted, #6c757d);
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.bookmark-btn:hover:not(:disabled) {
+  color: var(--primary-color);
+  transform: scale(1.1);
+}
+
+.bookmark-btn-saved {
+  color: var(--primary-color);
+}
+
+.bookmark-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

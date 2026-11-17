@@ -84,6 +84,10 @@ export const mockQuestions = [
   },
 ];
 
+// Bookmarks: user-1 has saved question-1
+export const mockBookmarkIds = ['question-1'];
+export const mockSavedQuestions = [mockQuestions[0]];
+
 export const mockAuthResponse = {
   login: {
     token: mockUsers.user1.token,
