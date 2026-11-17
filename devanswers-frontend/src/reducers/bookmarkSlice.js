@@ -18,12 +18,20 @@ const initialState = {
   error: null,
 };
 
+// A load that finishes after the user logged out (or another user logged in)
+// must not write the previous user's saves into the store.
+const STALE_SESSION = "stale-session";
+
 export const fetchBookmarkIds = createAsyncThunk(
   "bookmark/fetchBookmarkIds",
   async (_, { getState, rejectWithValue }) => {
     try {
       const { token } = getState().user.userInfo || {};
-      return await getBookmarkIds(token);
+      const ids = await getBookmarkIds(token);
+      if (getState().user.userInfo?.token !== token) {
+        return rejectWithValue(STALE_SESSION);
+      }
+      return ids;
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message ||
@@ -39,7 +47,11 @@ export const fetchBookmarkedQuestions = createAsyncThunk(
   async (_, { getState, rejectWithValue }) => {
     try {
       const { token } = getState().user.userInfo || {};
-      return await getBookmarkedQuestions(token);
+      const questions = await getBookmarkedQuestions(token);
+      if (getState().user.userInfo?.token !== token) {
+        return rejectWithValue(STALE_SESSION);
+      }
+      return questions;
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message ||
@@ -83,9 +95,18 @@ const bookmarkSlice = createSlice({
 
       // saved ids
       .addCase(fetchBookmarkIds.fulfilled, (state, action) => {
-        state.ids = action.payload.map(String);
+        // Keep clicks made while the request was running: the server list may
+        // not reflect a save/unsave that is still in flight.
+        const merged = action.payload
+          .map(String)
+          .filter((id) => !state.pendingIds.includes(id));
+        state.pendingIds.forEach((id) => {
+          if (state.ids.includes(id)) merged.push(id);
+        });
+        state.ids = merged;
       })
       .addCase(fetchBookmarkIds.rejected, (state, action) => {
+        if (action.payload === STALE_SESSION) return;
         state.error = action.payload || action.error.message;
       })
 
@@ -99,6 +120,7 @@ const bookmarkSlice = createSlice({
         state.savedQuestions = action.payload;
       })
       .addCase(fetchBookmarkedQuestions.rejected, (state, action) => {
+        if (action.payload === STALE_SESSION) return;
         state.listStatus = "rejected";
         state.error = action.payload || action.error.message;
       })
@@ -142,7 +164,7 @@ const bookmarkSlice = createSlice({
             state.ids.push(questionId);
           }
           const removed = state.removedQuestions[questionId];
-          if (removed) {
+          if (removed && !state.savedQuestions.some((q) => q._id === questionId)) {
             state.savedQuestions.push(removed);
           }
         } else {

@@ -204,6 +204,62 @@ describe('bookmarkSlice', () => {
     });
   });
 
+  describe('fetchBookmarkIds while a toggle is in flight', () => {
+    it('should keep an id the user saved while the request was running', () => {
+      let state = bookmarkReducer(
+        initialState,
+        toggleBookmark.pending('req', { questionId: 'q9', currentlySaved: false })
+      );
+
+      state = bookmarkReducer(state, fetchBookmarkIds.fulfilled(['q1'], 'req2', undefined));
+
+      expect([...state.ids].sort()).toEqual(['q1', 'q9']);
+    });
+
+    it('should not bring back an id the user unsaved while the request was running', () => {
+      const start = { ...initialState, ids: ['q1', 'q2'] };
+      let state = bookmarkReducer(
+        start,
+        toggleBookmark.pending('req', { questionId: 'q1', currentlySaved: true })
+      );
+
+      state = bookmarkReducer(state, fetchBookmarkIds.fulfilled(['q1', 'q2'], 'req2', undefined));
+
+      expect(state.ids).toEqual(['q2']);
+    });
+
+    it('should ignore a stale-session rejection without touching the state', () => {
+      const start = { ...initialState, ids: ['q1'] };
+
+      const state = bookmarkReducer(
+        start,
+        fetchBookmarkIds.rejected(null, 'req', undefined, 'stale-session')
+      );
+
+      expect(state).toEqual(start);
+    });
+  });
+
+  describe('rolling back a failed unsave', () => {
+    it('should not duplicate a question that a refetch already restored', () => {
+      const arg = { questionId: 'q1', currentlySaved: true };
+      const start = { ...initialState, ids: ['q1'], savedQuestions: [q1] };
+      let state = bookmarkReducer(start, toggleBookmark.pending('req', arg));
+      // A refetch (e.g. Profile remount) completes before the failure arrives
+      state = bookmarkReducer(
+        state,
+        fetchBookmarkedQuestions.fulfilled([q1], 'req2', undefined)
+      );
+
+      state = bookmarkReducer(
+        state,
+        toggleBookmark.rejected(null, 'req', arg, 'Network Error')
+      );
+
+      expect(state.savedQuestions).toEqual([q1]);
+    });
+  });
+
   describe('logout', () => {
     it('should reset everything so another user never sees the previous saves', () => {
       const start = {
@@ -271,6 +327,63 @@ describe('bookmarkSlice', () => {
       expect(result.type).toBe('bookmark/toggleBookmark/rejected');
       expect(store.getState().bookmark.ids).not.toContain('question-9');
       expect(store.getState().bookmark.error).toBe('Question not found');
+    });
+
+    it('should not repopulate saved ids when the user logs out while they load', async () => {
+      server.use(
+        http.get(`${BASE_URL}/users/me/bookmarks/ids`, async () => {
+          await delay(30);
+          return HttpResponse.json({ data: ['question-1'] });
+        })
+      );
+      const store = createStore();
+
+      const pending = store.dispatch(fetchBookmarkIds());
+      store.dispatch(logout());
+      await pending;
+
+      expect(store.getState().bookmark).toEqual(initialState);
+    });
+
+    it('should not repopulate the saved list when the user logs out while it loads', async () => {
+      server.use(
+        http.get(`${BASE_URL}/users/me/bookmarks`, async () => {
+          await delay(30);
+          return HttpResponse.json({ data: [{ _id: 'question-1', title: 'Old user question' }] });
+        })
+      );
+      const store = createStore();
+
+      const pending = store.dispatch(fetchBookmarkedQuestions());
+      store.dispatch(logout());
+      await pending;
+
+      expect(store.getState().bookmark).toEqual(initialState);
+    });
+
+    it('should keep a save that is still in flight when the ids arrive', async () => {
+      server.use(
+        http.get(`${BASE_URL}/users/me/bookmarks/ids`, async () => {
+          await delay(10);
+          return HttpResponse.json({ data: ['question-1'] });
+        }),
+        http.put(`${BASE_URL}/users/me/bookmarks/:questionId`, async () => {
+          await delay(80);
+          return HttpResponse.json({ data: { questionId: 'question-3', isBookmarked: true } });
+        })
+      );
+      const store = createStore();
+
+      const loading = store.dispatch(fetchBookmarkIds());
+      const saving = store.dispatch(
+        toggleBookmark({ questionId: 'question-3', currentlySaved: false })
+      );
+      await loading;
+
+      // The ids response arrived while the save was still running
+      expect([...store.getState().bookmark.ids].sort()).toEqual(['question-1', 'question-3']);
+      await saving;
+      expect([...store.getState().bookmark.ids].sort()).toEqual(['question-1', 'question-3']);
     });
 
     it('should never change state.question.loading during any bookmark request', async () => {
