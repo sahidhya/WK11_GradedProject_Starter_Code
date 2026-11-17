@@ -50,3 +50,5 @@ Tests (`tests/`): `unit/` mocks dependencies; `integration/` uses supertest agai
 - Keep changes scoped to the task. Do not reformat or "clean up" unrelated files; some starter files use CRLF or mixed line endings, so edit them in place and check `git diff --stat` stays small.
 - `devanswers-frontend/dist/` is build output and is git-ignored: never commit it. `.env` is git-ignored too: never print or commit secrets.
 - Before finishing a change run `npm test` in both packages and `npm run lint` in the frontend (lint is clean; keep it clean).
+- The bookmark and edit code carries short explanatory comments (what and why, one or two lines). Keep them accurate when changing that code and add the same style to new code there; do not add comments to unrelated files.
+- Submission: zip as `<firstname>_Week11_GradedProject_Solution` containing `devanswers-frontend/`, `devanswers-backend/`, `CLAUDE.md`, `specs/` and `.claude/`, without `node_modules`, `dist` or `.env`.
