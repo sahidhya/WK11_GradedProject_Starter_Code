@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
 import { useSelector, useDispatch } from 'react-redux';
 import { FaUser, FaEnvelope, FaSave, FaEdit } from 'react-icons/fa';
@@ -43,30 +43,32 @@ const Profile = () => {
     website: '',    
   });
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    } else if (userInfo?.userId) {
-      fetchUserStats();
-    }
-  }, [isAuthenticated, navigate, userInfo]);
+  const userId = userInfo?.userId;
 
-  useEffect(() => {
-    if (userInfo?.token) {
-      dispatch(fetchBookmarkedQuestions());
-    }
-  }, [userInfo?.token, dispatch]);
-
-  const fetchUserStats = async () => {
+  const fetchUserStats = useCallback(async () => {
     try {
-      const response = await axios.get(USER_API.STATS(userInfo.userId));
+      const response = await axios.get(USER_API.STATS(userId));
       if (response.data.success) {
         setStats(response.data.data);
       }
     } catch (err) {
       console.error('Error fetching user stats:', err);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+    } else if (userId) {
+      fetchUserStats();
+    }
+  }, [isAuthenticated, navigate, userId, fetchUserStats]);
+
+  useEffect(() => {
+    if (userInfo?.token) {
+      dispatch(fetchBookmarkedQuestions());
+    }
+  }, [userInfo?.token, dispatch]);
 
   const handleChange = (e) => {
     setFormData({
@@ -91,7 +93,7 @@ const Profile = () => {
         setIsEditing(false);
         setLoading(false);
       }, 1000);
-    } catch (err) {
+    } catch {
       setError('Failed to update profile. Please try again.');
       setLoading(false);
     }
